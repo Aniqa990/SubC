@@ -52,6 +52,7 @@ def Function():
         fail('Missing ) after parameter list')
     body = Block()
     # Pass return type and parameters into AST.Function
+    # Note: idtok = ('identifier', name, lineNumber, symbol_ref); we ignore symbol_ref for functions
     return AST.Function(idtok[1], typ, params, body)
 
 
@@ -122,6 +123,8 @@ def Stmt():
     if la[0] == 'identifier':
         idtok = nextToken()
         la2 = lookahead()
+        # idtok[3] is symbol_ref from token
+        symbol_ref = idtok[3] if len(idtok) > 3 else None
 
         # AssignmentStmt: Identifier '=' Expr ';'
         if la2 and la2[0] == 'assign':
@@ -130,7 +133,7 @@ def Stmt():
             t = nextToken()
             if t[0] != 'semicolon':
                 fail('Missing ; after assignment')
-            return AST.Assign(AST.Identifier(idtok[1]), expr)
+            return AST.Assign(AST.Identifier(idtok[1], symbol_ref), expr)
 
         # FuncCallStmt: Identifier '(' ArgListOpt ')' ';'
         if la2 and la2[0] == 'lparen':
@@ -142,13 +145,13 @@ def Stmt():
             t = nextToken()
             if t[0] != 'semicolon':
                 fail('Missing ; after function call')
-            return AST.FuncCall(idtok[1], args)
+            return AST.FuncCall(idtok[1], args, symbol_ref)
 
         # ExprStmt (identifier-only expression)
         t = nextToken()
         if t[0] != 'semicolon':
             fail('Missing ; after expression')
-        return AST.Identifier(idtok[1])
+        return AST.Identifier(idtok[1], symbol_ref)
 
     # Keywords -> delegate to the matching statement parser (keywords are token types now)
     if la[0] == 'if':
@@ -169,6 +172,8 @@ def Stmt():
     if la[0] == 'identifier':
         idtok = nextToken()
         la2 = lookahead()
+        # idtok[3] is symbol_ref from token
+        symbol_ref = idtok[3] if len(idtok) > 3 else None
 
         # AssignmentStmt: Identifier '=' Expr ';'
         if la2 and la2[0] == 'assign':
@@ -177,7 +182,7 @@ def Stmt():
             t = nextToken()
             if t[0] != 'semicolon':
                 fail('Missing ; after assignment')
-            return AST.Assign(AST.Identifier(idtok[1]), expr)
+            return AST.Assign(AST.Identifier(idtok[1], symbol_ref), expr)
 
         # FuncCallStmt: Identifier '(' ArgListOpt ')' ';'
         if la2 and la2[0] == 'lparen':
@@ -189,13 +194,13 @@ def Stmt():
             t = nextToken()
             if t[0] != 'semicolon':
                 fail('Missing ; after function call')
-            return AST.FuncCall(idtok[1], args)
+            return AST.FuncCall(idtok[1], args, symbol_ref)
 
         # ExprStmt (identifier-only expression)
         t = nextToken()
         if t[0] != 'semicolon':
             fail('Missing ; after expression')
-        return AST.Identifier(idtok[1])
+        return AST.Identifier(idtok[1], symbol_ref)
 
     # In other cases, try parsing an expression statement
     if la[0] in ('number', 'lparen') or (la[0] in ('unop', 'addop') and la[1] in ('-', '!')) or la[0] in ('true', 'false'):
@@ -228,6 +233,7 @@ def VarDecl():
     t = nextToken()
     if t[0] != 'semicolon':
         fail('Missing ; after variable declaration')
+    # Note: VarDecl stores idtok[1] (name) but ignores symbol_ref; semantic analyzer sets it
     return AST.VarDecl(typ, idtok[1], init)
 
 
@@ -374,7 +380,8 @@ def ReadStmt():
     t = nextToken()
     if t[0] != 'semicolon':
         fail('Missing ; after read')
-    return AST.Read(AST.Identifier(idtok[1]))
+    # idtok[3] is symbol_ref from token
+    return AST.Read(AST.Identifier(idtok[1], idtok[3] if len(idtok) > 3 else None))
 
 
 ### For header helpers
@@ -390,6 +397,7 @@ def VarDeclNoSemicolon():
     if idtok[0] != 'identifier':
         fail('Expected identifier in var declaration')
     init = VarInitOpt()
+    # Note: VarDecl stores idtok[1] (name) but ignores symbol_ref
     return AST.VarDecl(typ, idtok[1], init)
 
 
@@ -401,7 +409,8 @@ def AssignmentExpr():
     idtok = nextToken()
     if lookahead() and lookahead()[0] == 'assign':
         nextToken()
-        return AST.Assign(AST.Identifier(idtok[1]), Expr())
+        # idtok[3] is symbol_ref from token
+        return AST.Assign(AST.Identifier(idtok[1], idtok[3] if len(idtok) > 3 else None), Expr())
     fail('Invalid assignment expression')
 
 
@@ -577,14 +586,16 @@ def Primary():
 
     # identifier -> possible function call
     if tok[0] == 'identifier':
+        # tok[3] is symbol_ref from token
+        symbol_ref = tok[3] if len(tok) > 3 else None
         if lookahead() and lookahead()[0] == 'lparen':
             nextToken()
             args = ArgListOpt()
             t = nextToken()
             if t[0] != 'rparen':
                 fail('Missing ) after function call')
-            return AST.FuncCall(tok[1], args)
-        return AST.Identifier(tok[1])
+            return AST.FuncCall(tok[1], args, symbol_ref)
+        return AST.Identifier(tok[1], symbol_ref)
 
     if tok[0] == 'lparen':
         expr = Expr()

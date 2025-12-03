@@ -76,6 +76,127 @@ class SemanticAnalyzer:
                 return scope[name]
         return None
 
+    def resolve_symbol_ref(self, name):
+        """Resolve a symbol reference and return its entry from global_symbols or None."""
+        # Check global symbols first (functions and global variables)
+        if name in self.global_symbols:
+            return self.global_symbols[name]
+        # Check all function scopes if currently analyzing a function
+        if self.current_function is not None and self.function_symbols and self.current_function.getName() in self.function_symbols:
+            func_scopes = self.function_symbols[self.current_function.getName()]
+            for scope in func_scopes:
+                if name in scope.get('symbols', {}):
+                    return scope['symbols'][name]
+        return None
+
+    def populate_symbol_refs(self, node):
+        """Recursively walk the AST and populate symbol_ref dicts in Identifier and FuncCall nodes."""
+        if node is None:
+            return
+        
+        t = type(node)
+        
+        # Identifier nodes
+        if t is AST.Identifier:
+            if hasattr(node, 'symbol_ref') and node.symbol_ref is not None:
+                entry = self.resolve_symbol_ref(node.name)
+                if entry:
+                    node.symbol_ref['entry'] = entry
+            return
+        
+        # FuncCall nodes
+        if t is AST.FuncCall:
+            if hasattr(node, 'symbol_ref') and node.symbol_ref is not None:
+                entry = self.resolve_symbol_ref(node.name)
+                if entry:
+                    node.symbol_ref['entry'] = entry
+            # recurse into args
+            for arg in node.args:
+                self.populate_symbol_refs(arg)
+            return
+        
+        # BinOp nodes
+        if t is AST.BinOp:
+            self.populate_symbol_refs(node.left)
+            self.populate_symbol_refs(node.right)
+            return
+        
+        # UnOp nodes
+        if t is AST.UnOp:
+            self.populate_symbol_refs(node.inner_exp)
+            return
+        
+        # Assign nodes
+        if t is AST.Assign:
+            self.populate_symbol_refs(node.target)
+            self.populate_symbol_refs(node.expr)
+            return
+        
+        # VarDecl nodes
+        if t is AST.VarDecl:
+            if node.init:
+                self.populate_symbol_refs(node.init)
+            return
+        
+        # Block nodes
+        if t is AST.Block:
+            for stmt in node.statements:
+                self.populate_symbol_refs(stmt)
+            return
+        
+        # IfElse nodes
+        if t is AST.IfElse:
+            self.populate_symbol_refs(node.cond)
+            self.populate_symbol_refs(node.then_branch)
+            if node.else_branch:
+                self.populate_symbol_refs(node.else_branch)
+            return
+        
+        # While nodes
+        if t is AST.While:
+            self.populate_symbol_refs(node.cond)
+            self.populate_symbol_refs(node.body)
+            return
+        
+        # For nodes
+        if t is AST.For:
+            self.populate_symbol_refs(node.init)
+            self.populate_symbol_refs(node.cond)
+            self.populate_symbol_refs(node.step)
+            self.populate_symbol_refs(node.body)
+            return
+        
+        # Return nodes
+        if t is AST.Return:
+            self.populate_symbol_refs(node.expression)
+            return
+        
+        # Print nodes
+        if t is AST.Print:
+            self.populate_symbol_refs(node.expr)
+            return
+        
+        # Read nodes
+        if t is AST.Read:
+            self.populate_symbol_refs(node.target)
+            return
+        
+        # Function nodes - set current_function for context during recursion
+        if t is AST.Function:
+            old_func = self.current_function
+            self.current_function = node
+            self.populate_symbol_refs(node.statement)
+            self.current_function = old_func
+            return
+        
+        # Program nodes
+        if t is AST.Program:
+            funcs = node.getFunction()
+            if funcs:
+                for f in funcs:
+                    self.populate_symbol_refs(f)
+            return
+
     def add_function(self, name, return_type, params):
         if name in self.functions:
             self.error(f"Duplicate function declaration '{name}'")
@@ -99,6 +220,9 @@ class SemanticAnalyzer:
         # Second pass: analyze each function body
         for f in funcs:
             self.analyze_function(f)
+
+        # Third pass: populate symbol references in the AST
+        self.populate_symbol_refs(program)
 
         print('Semantic: no errors')
 

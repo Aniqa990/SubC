@@ -111,8 +111,9 @@ class UnOp():
 
 class Identifier:
 
-	def __init__(self, name):
+	def __init__(self, name, symbol_ref=None):
 		self.name = name
+		self.symbol_ref = symbol_ref  # Mutable dict reference from token; semantic analyzer populates with {'entry': symbol_entry}
 
 	def __repr__(self):
 		return f"Identifier({self.name!r})"
@@ -194,9 +195,10 @@ class For:
 
 class FuncCall:
 
-	def __init__(self, name, args=None):
+	def __init__(self, name, args=None, symbol_ref=None):
 		self.name = name
 		self.args = args or []
+		self.symbol_ref = symbol_ref  # Mutable dict reference from token; semantic analyzer populates with {'entry': symbol_entry}
 
 	def __repr__(self):
 		return f"FuncCall({self.name!r}, args={repr(self.args)})"

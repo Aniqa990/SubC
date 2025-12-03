@@ -112,8 +112,10 @@ def check(newStr):
 		except Exception:
 			return ("number", newStr, lineNumber)
 
-	# identifier
+	# identifier: emit ('identifier', name, lineNumber, symbol_ref)
+	# symbol_ref is a mutable container (dict) that the semantic analyzer will populate
 	if len(newStr) > 0 and len(newStr) < 32:
-		return ("identifier", newStr, lineNumber)
+		symbol_ref = {}  # Mutable dict; semantic analyzer will fill in {'entry': symbol_table_entry}
+		return ("identifier", newStr, lineNumber, symbol_ref)
 
 	return None
