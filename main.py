@@ -15,12 +15,15 @@ Rules For Identifiers:
 Accepts C program from user, reads it and passes it to lexer for lexical analysis.
 '''
 def main():
+	# Require a source file argument; show usage if missing
+	if len(sys.argv) < 2:
+		print("Usage: python main.py <source_file.c>")
+		print("Example: python main.py \"Test Programs/return_1.c\"")
+		sys.exit(2)
+
 	source_file = sys.argv[1]
 	if check_file(source_file):
-		
-		f = open(source_file, "r")
-		
-		if f.mode == 'r':
+		with open(source_file, "r") as f:
 			contents = f.read()
 			compile(contents)
 
@@ -38,8 +41,20 @@ def compile(contents):
 	# Parse and show AST
 	print("--- Syntax / AST ---")
 	ast = lookaheadparser.parse(token_list)
-	print(ast)
+	import ast_tree_printer
+	ast_tree_printer.pretty_print_ast_tree(ast)
 	print("--- End AST ---")
+
+	# Semantic analysis
+	import semantic
+	an = semantic.SemanticAnalyzer()
+	try:
+		an.analyze(ast)
+		# print symbol tables after successful analysis
+		an.print_symbol_tables()
+	except Exception:
+		print("Semantic analysis failed")
+		sys.exit(3)
 
 '''
 Checks if .c file is passed to the compiler. 

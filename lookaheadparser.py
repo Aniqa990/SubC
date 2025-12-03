@@ -1,5 +1,6 @@
 import sys
 import ASTNodes as AST
+import lexer
 
 token_list = []
 
@@ -25,7 +26,7 @@ def FunctionList():
     while lookahead() is not None:
         # Expect top-level function declarations to start with 'func'
         la = lookahead()
-        if la[0] == 'Keyword' and la[1] == 'func':
+        if la[0] == 'func':
             funcs.append(Function())
         else:
             # Anything else at top-level is a parse error
@@ -36,27 +37,28 @@ def FunctionList():
 def Function():
     # Function → 'func' Type Identifier '(' ParamListOpt ')' Block
     t = nextToken()
-    if t[0] != 'Keyword' or t[1] != 'func':
+    if t[0] != 'func':
         fail('Expected func at start of function')
     typ = Type()
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected function name identifier')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after function name')
     params = ParamListOpt()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after parameter list')
     body = Block()
-    return AST.Function(idtok[1], body)
+    # Pass return type and parameters into AST.Function
+    return AST.Function(idtok[1], typ, params, body)
 
 
 def ParamListOpt():
     # ParamListOpt → ParamList | ε
     la = lookahead()
-    if la is None or la[0] == 'Close-Paren':
+    if la is None or la[0] == 'rparen':
         return []
     return ParamList()
 
@@ -65,7 +67,7 @@ def ParamList():
     # ParamList → Param (',' Param)*
     params = []
     params.append(Param())
-    while lookahead() and lookahead()[0] == 'Comma':
+    while lookahead() and lookahead()[0] == 'comma':
         nextToken()
         params.append(Param())
     return params
@@ -75,25 +77,25 @@ def Param():
     # Param → Type Identifier
     typ = Type()
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected parameter name')
     return (typ, idtok[1])
 
 
 def Type():
     la = lookahead()
-    if la is None or la[0] != 'Type':
+    if la is None or la[0] not in lexer.types:
         fail('Expected type')
     return nextToken()[1]
 
 
 def Block():
     t = nextToken()
-    if t[0] != 'Open-Brace':
+    if t[0] != 'lbrace':
         fail('Expected { to start block')
     stmts = StmtList()
     t = nextToken()
-    if t[0] != 'Close-Brace':
+    if t[0] != 'rbrace':
         fail('Expected } to close block')
     return AST.Block(stmts)
 
@@ -101,7 +103,7 @@ def Block():
 def StmtList():
     # StmtList → Stmt StmtList | ε
     stmts = []
-    while lookahead() is not None and lookahead()[0] != 'Close-Brace':
+    while lookahead() is not None and lookahead()[0] != 'rbrace':
         stmts.append(Stmt())
     return stmts
 
@@ -113,94 +115,93 @@ def Stmt():
         fail('Unexpected EOF in statement')
 
     # Variable declaration starts with a type
-    if la[0] == 'Type':
+    if la[0] in lexer.types:
         return VarDecl()
 
     # AssignmentStmt | FuncCallStmt | ExprStmt begin with Identifier
-    if la[0] == 'Identifier':
+    if la[0] == 'identifier':
         idtok = nextToken()
         la2 = lookahead()
 
         # AssignmentStmt: Identifier '=' Expr ';'
-        if la2 and la2[0] == 'Assign':
+        if la2 and la2[0] == 'assign':
             nextToken()
             expr = Expr()
             t = nextToken()
-            if t[0] != 'Semicolon':
+            if t[0] != 'semicolon':
                 fail('Missing ; after assignment')
             return AST.Assign(AST.Identifier(idtok[1]), expr)
 
         # FuncCallStmt: Identifier '(' ArgListOpt ')' ';'
-        if la2 and la2[0] == 'Open-Paren':
+        if la2 and la2[0] == 'lparen':
             nextToken()
             args = ArgListOpt()
             t = nextToken()
-            if t[0] != 'Close-Paren':
+            if t[0] != 'rparen':
                 fail('Missing ) after function call')
             t = nextToken()
-            if t[0] != 'Semicolon':
+            if t[0] != 'semicolon':
                 fail('Missing ; after function call')
             return AST.FuncCall(idtok[1], args)
 
         # ExprStmt (identifier-only expression)
         t = nextToken()
-        if t[0] != 'Semicolon':
+        if t[0] != 'semicolon':
             fail('Missing ; after expression')
         return AST.Identifier(idtok[1])
 
-    # Keywords -> delegate to the matching statement parser
-    if la[0] == 'Keyword':
-        if la[1] == 'if':
-            return IfStmt()
-        if la[1] == 'while':
-            return WhileStmt()
-        if la[1] == 'for':
-            return ForStmt()
-        if la[1] == 'return':
-            return ReturnStmt()
-        if la[1] == 'print':
-            return PrintStmt()
-        if la[1] == 'read':
-            return ReadStmt()
+    # Keywords -> delegate to the matching statement parser (keywords are token types now)
+    if la[0] == 'if':
+        return IfStmt()
+    if la[0] == 'while':
+        return WhileStmt()
+    if la[0] == 'for':
+        return ForStmt()
+    if la[0] == 'return':
+        return ReturnStmt()
+    if la[0] == 'print':
+        return PrintStmt()
+    if la[0] == 'read':
+        return ReadStmt()
 
     # identifier-led statements: assignment, function call, or identifier expression
 
-    if la[0] == 'Identifier':
+    if la[0] == 'identifier':
         idtok = nextToken()
         la2 = lookahead()
 
         # AssignmentStmt: Identifier '=' Expr ';'
-        if la2 and la2[0] == 'Assign':
+        if la2 and la2[0] == 'assign':
             nextToken()
             expr = Expr()
             t = nextToken()
-            if t[0] != 'Semicolon':
+            if t[0] != 'semicolon':
                 fail('Missing ; after assignment')
             return AST.Assign(AST.Identifier(idtok[1]), expr)
 
         # FuncCallStmt: Identifier '(' ArgListOpt ')' ';'
-        if la2 and la2[0] == 'Open-Paren':
+        if la2 and la2[0] == 'lparen':
             nextToken()
             args = ArgListOpt()
             t = nextToken()
-            if t[0] != 'Close-Paren':
+            if t[0] != 'rparen':
                 fail('Missing ) after function call')
             t = nextToken()
-            if t[0] != 'Semicolon':
+            if t[0] != 'semicolon':
                 fail('Missing ; after function call')
             return AST.FuncCall(idtok[1], args)
 
         # ExprStmt (identifier-only expression)
         t = nextToken()
-        if t[0] != 'Semicolon':
+        if t[0] != 'semicolon':
             fail('Missing ; after expression')
         return AST.Identifier(idtok[1])
 
     # In other cases, try parsing an expression statement
-    if la[0] in ('Integer', 'Float', 'Boolean', 'Open-Paren') or (la[0] == 'Operator' and la[1] in ('-', '!')):
+    if la[0] in ('number', 'lparen') or (la[0] in ('unop', 'addop') and la[1] in ('-', '!')) or la[0] in ('true', 'false'):
         expr = Expr()
         t = nextToken()
-        if t[0] != 'Semicolon':
+        if t[0] != 'semicolon':
             fail('Missing ; after expression')
         return expr
 
@@ -211,7 +212,7 @@ def Stmt():
 
 
 def VarInitOpt():
-    if lookahead() and lookahead()[0] == 'Assign':
+    if lookahead() and lookahead()[0] == 'assign':
         nextToken()
         return Expr()
     return None
@@ -221,11 +222,11 @@ def VarDecl():
     # VarDecl → Type Identifier VarInitOpt ';'
     typ = Type()
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected identifier after type')
     init = VarInitOpt()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after variable declaration')
     return AST.VarDecl(typ, idtok[1], init)
 
@@ -233,14 +234,14 @@ def VarDecl():
 def AssignmentStmt():
     # AssignmentStmt -> Identifier '=' Expr ';'
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected identifier at start of assignment')
     t = nextToken()
-    if t[0] != 'Assign':
+    if t[0] != 'assign':
         fail('Expected = in assignment')
     expr = Expr()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after assignment')
     return AST.Assign(AST.Identifier(idtok[1]), expr)
 
@@ -248,17 +249,17 @@ def AssignmentStmt():
 def FuncCallStmt():
     # FuncCallStmt -> Identifier '(' ArgListOpt ')' ';'
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected identifier at start of function call')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after function name')
     args = ArgListOpt()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after function call')
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after function call')
     return AST.FuncCall(idtok[1], args)
 
@@ -267,7 +268,7 @@ def ExprStmt():
     # ExprStmt -> Expr ';'
     expr = Expr()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after expression')
     return expr
 
@@ -275,14 +276,14 @@ def ExprStmt():
 def IfStmt():
     # IfStmt → if '(' Expr ')' Block ElseOpt
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'if':
+    if tok[0] != 'if':
         fail('Expected if')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after if')
     cond = Expr()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after if')
     then_blk = Block()
     else_blk = ElseOpt()
@@ -292,14 +293,14 @@ def IfStmt():
 def WhileStmt():
     # WhileStmt -> while '(' Expr ')' Block
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'while':
+    if tok[0] != 'while':
         fail('Expected while')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after while')
     cond = Expr()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after while')
     body = Block()
     return AST.While(cond, body)
@@ -308,22 +309,22 @@ def WhileStmt():
 def ForStmt():
     # ForStmt -> for '(' ForInit ';' ForCond ';' ForStep ')' Block
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'for':
+    if tok[0] != 'for':
         fail('Expected for')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after for')
     init = ForInit()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Expected ; after for init')
     cond = ForCond()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Expected ; after for condition')
     step = ForStep()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Expected ) after for header')
     body = Block()
     return AST.For(init, cond, step, body)
@@ -331,47 +332,47 @@ def ForStmt():
 
 def ReturnStmt():
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'return':
+    if tok[0] != 'return':
         fail('Expected return')
     expr = Expr()
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after return')
     return AST.Return(expr)
 
 
 def PrintStmt():
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'print':
+    if tok[0] != 'print':
         fail('Expected print')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after print')
     expr = Expr()
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after print')
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after print')
     return AST.Print(expr)
 
 
 def ReadStmt():
     tok = nextToken()
-    if tok[0] != 'Keyword' or tok[1] != 'read':
+    if tok[0] != 'read':
         fail('Expected read')
     t = nextToken()
-    if t[0] != 'Open-Paren':
+    if t[0] != 'lparen':
         fail('Expected ( after read')
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected identifier inside read()')
     t = nextToken()
-    if t[0] != 'Close-Paren':
+    if t[0] != 'rparen':
         fail('Missing ) after read')
     t = nextToken()
-    if t[0] != 'Semicolon':
+    if t[0] != 'semicolon':
         fail('Missing ; after read')
     return AST.Read(AST.Identifier(idtok[1]))
 
@@ -382,11 +383,11 @@ def ReadStmt():
 def VarDeclNoSemicolon():
     # VarDeclNoSemicolon → Type Identifier VarInitOpt
     la = lookahead()
-    if la is None or la[0] != 'Type':
+    if la is None or la[0] not in lexer.types:
         return None
     typ = Type()
     idtok = nextToken()
-    if idtok[0] != 'Identifier':
+    if idtok[0] != 'identifier':
         fail('Expected identifier in var declaration')
     init = VarInitOpt()
     return AST.VarDecl(typ, idtok[1], init)
@@ -395,10 +396,10 @@ def VarDeclNoSemicolon():
 def AssignmentExpr():
     # AssignmentExpr → Identifier '=' Expr (no semicolon expected)
     la = lookahead()
-    if la is None or la[0] != 'Identifier':
+    if la is None or la[0] != 'identifier':
         return None
     idtok = nextToken()
-    if lookahead() and lookahead()[0] == 'Assign':
+    if lookahead() and lookahead()[0] == 'assign':
         nextToken()
         return AST.Assign(AST.Identifier(idtok[1]), Expr())
     fail('Invalid assignment expression')
@@ -408,9 +409,9 @@ def ForInit():
     # ForInit → VarDeclNoSemicolon | AssignmentExpr | ε
     if lookahead() is None:
         return None
-    if lookahead()[0] == 'Type':
+    if lookahead()[0] in lexer.types:
         return VarDeclNoSemicolon()
-    if lookahead()[0] == 'Identifier' and len(token_list) > 1 and token_list[1][0] == 'Assign':
+    if lookahead()[0] == 'identifier' and len(token_list) > 1 and token_list[1][0] == 'assign':
         return AssignmentExpr()
     return None
 
@@ -418,7 +419,7 @@ def ForInit():
 def ElseOpt():
     # ElseOpt → else Block | ε
     la = lookahead()
-    if la and la[0] == 'Keyword' and la[1] == 'else':
+    if la and la[0] == 'else':
         nextToken()
         return Block()
     return None
@@ -426,7 +427,7 @@ def ElseOpt():
 
 def ForCond():
     # ForCond → Expr | ε
-    if lookahead() is None or lookahead()[0] == 'Semicolon':
+    if lookahead() is None or lookahead()[0] == 'semicolon':
         return None
     return Expr()
 
@@ -435,7 +436,7 @@ def ForStep():
     # ForStep → AssignmentExpr | ε
     if lookahead() is None:
         return None
-    if lookahead()[0] == 'Identifier' and len(token_list) > 1 and token_list[1][0] == 'Assign':
+    if lookahead()[0] == 'identifier' and len(token_list) > 1 and token_list[1][0] == 'assign':
         return AssignmentExpr()
     return None
 
@@ -457,7 +458,7 @@ def LogicalOr():
 def LogicalOrTail(left):
     # LogicalOrTail → '||' LogicalAnd LogicalOrTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] == '||':
+    if la and la[0] == 'logop' and la[1] == '||':
         nextToken()
         right = LogicalAnd()
         combined = AST.BinOp(left, '||', right)
@@ -474,7 +475,7 @@ def LogicalAnd():
 def EqualityTail(left):
     # EqualityTail → '&&' Equality EqualityTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] == '&&':
+    if la and la[0] == 'logop' and la[1] == '&&':
         nextToken()
         right = Equality()
         combined = AST.BinOp(left, '&&', right)
@@ -491,7 +492,7 @@ def Equality():
 def EqualityOpTail(left):
     # EqualityOpTail → ('=='|'!=') Relational EqualityOpTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] in ('==', '!='):
+    if la and la[0] == 'relop' and la[1] in ('==', '!='):
         op = nextToken()[1]
         right = Relational()
         combined = AST.BinOp(left, op, right)
@@ -508,7 +509,7 @@ def Relational():
 def RelOpTail(left):
     # RelOpTail → RelOp Additive RelOpTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] in ('<', '>', '<=', '>='):
+    if la and la[0] == 'relop' and la[1] in ('<', '>', '<=', '>='):
         op = nextToken()[1]
         right = Additive()
         combined = AST.BinOp(left, op, right)
@@ -525,7 +526,7 @@ def Additive():
 def AddOpTail(left):
     # AddOpTail → AddOp Multiplicative AddOpTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] in ('+', '-'):
+    if la and la[0] == 'addop' and la[1] in ('+', '-'):
         op = nextToken()[1]
         right = Multiplicative()
         combined = AST.BinOp(left, op, right)
@@ -542,7 +543,7 @@ def Multiplicative():
 def MulOpTail(left):
     # MulOpTail → ('*'|'/'|'%') Unary MulOpTail | ε
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] in ('*', '/', '%'):
+    if la and la[0] in ('mulop', 'divop', 'modop') and la[1] in ('*', '/', '%'):
         op = nextToken()[1]
         right = Unary()
         combined = AST.BinOp(left, op, right)
@@ -553,7 +554,7 @@ def MulOpTail(left):
 def Unary():
     # Unary → UnaryOp Unary | Primary
     la = lookahead()
-    if la and la[0] == 'Operator' and la[1] in ('-', '!', '~'):
+    if la and la[0] in ('unop', 'addop') and la[1] in ('-', '!', '~'):
         op = nextToken()[1]
         rhs = Unary()
         return AST.UnOp(op, rhs)
@@ -566,34 +567,29 @@ def Primary():
     if la is None:
         fail('Unexpected EOF in expression')
     tok = nextToken()
-    if tok[0] == 'Integer':
-        try:
-            v = int(tok[1])
-        except:
-            v = tok[1]
-        return AST.Constant(v)
-    if tok[0] == 'Float':
-        try:
-            v = float(tok[1])
-        except:
-            v = tok[1]
-        return AST.Constant(v)
-    if tok[0] == 'Boolean':
-        return AST.Constant(True if tok[1] == 'true' else False)
-    if tok[0] == 'Identifier':
-        # FuncCallExpr or identifier
-        if lookahead() and lookahead()[0] == 'Open-Paren':
+    # numbers -> ('number', value)
+    if tok[0] == 'number':
+        return AST.Constant(tok[1])
+
+    # booleans are now keyword tokens 'true'/'false'
+    if tok[0] == 'true' or tok[0] == 'false':
+        return AST.Constant(True if tok[0] == 'true' else False)
+
+    # identifier -> possible function call
+    if tok[0] == 'identifier':
+        if lookahead() and lookahead()[0] == 'lparen':
             nextToken()
             args = ArgListOpt()
             t = nextToken()
-            if t[0] != 'Close-Paren':
+            if t[0] != 'rparen':
                 fail('Missing ) after function call')
             return AST.FuncCall(tok[1], args)
         return AST.Identifier(tok[1])
-    if tok[0] == 'Open-Paren':
+
+    if tok[0] == 'lparen':
         expr = Expr()
         t = nextToken()
-        if t[0] != 'Close-Paren':
+        if t[0] != 'rparen':
             fail('Missing )')
         return expr
     fail('Unexpected token %r in primary' % (tok,))
@@ -601,7 +597,7 @@ def Primary():
 
 def ArgListOpt():
     # ArgListOpt → ArgList | ε
-    if lookahead() and lookahead()[0] == 'Close-Paren':
+    if lookahead() and lookahead()[0] == 'rparen':
         return []
     return ArgList()
 
@@ -610,7 +606,7 @@ def ArgList():
     # ArgList → Expr (',' Expr)*
     args = []
     args.append(Expr())
-    while lookahead() and lookahead()[0] == 'Comma':
+    while lookahead() and lookahead()[0] == 'comma':
         nextToken()
         args.append(Expr())
     return args

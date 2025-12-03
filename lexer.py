@@ -37,39 +37,53 @@ def lex(source):
 
 		nxt = source[x+1] if x+1 < len(source) else ''
 
+		# comments: skip // ... until end of line
+		if c == '/' and nxt == '/':
+			while x < len(source) and source[x] != '\n':
+				x += 1
+			continue
+
 		# two-character operators
 		if c == '=' and nxt == '=':
-			token_list.append(("Operator", '==', lineNumber)); x += 2; continue
+			token_list.append(("relop", '==', lineNumber)); x += 2; continue
 		if c == '!' and nxt == '=':
-			token_list.append(("Operator", '!=', lineNumber)); x += 2; continue
+			token_list.append(("relop", '!=', lineNumber)); x += 2; continue
 		if c == '<' and nxt == '=':
-			token_list.append(("Operator", '<=', lineNumber)); x += 2; continue
+			token_list.append(("relop", '<=', lineNumber)); x += 2; continue
 		if c == '>' and nxt == '=':
-			token_list.append(("Operator", '>=', lineNumber)); x += 2; continue
+			token_list.append(("relop", '>=', lineNumber)); x += 2; continue
 		if c == '&' and nxt == '&':
-			token_list.append(("Operator", '&&', lineNumber)); x += 2; continue
+			token_list.append(("logop", '&&', lineNumber)); x += 2; continue
 		if c == '|' and nxt == '|':
-			token_list.append(("Operator", '||', lineNumber)); x += 2; continue
+			token_list.append(("logop", '||', lineNumber)); x += 2; continue
 
 		# single-character tokens
 		if c == '=':
-			token_list.append(("Assign", '=', lineNumber)); x += 1; continue
-		if c in '+-*/%~':
-			token_list.append(("Operator", c, lineNumber)); x += 1; continue
+			token_list.append(("assign", '=', lineNumber)); x += 1; continue
+		if c in '+-':
+			token_list.append(("addop", c, lineNumber)); x += 1; continue
+		if c == '*':
+			token_list.append(("mulop", c, lineNumber)); x += 1; continue
+		if c == '/':
+			token_list.append(("divop", c, lineNumber)); x += 1; continue
+		if c == '%':
+			token_list.append(("modop", c, lineNumber)); x += 1; continue
+		if c == '~' or c == '!':
+			token_list.append(("unop", c, lineNumber)); x += 1; continue
 		if c in '<>':
-			token_list.append(("Operator", c, lineNumber)); x += 1; continue
+			token_list.append(("relop", c, lineNumber)); x += 1; continue
 		if c == '(':
-			token_list.append(("Open-Paren", c, lineNumber)); x += 1; continue
+			token_list.append(("lparen", c, lineNumber)); x += 1; continue
 		if c == ')':
-			token_list.append(("Close-Paren", c, lineNumber)); x += 1; continue
+			token_list.append(("rparen", c, lineNumber)); x += 1; continue
 		if c == '{':
-			token_list.append(("Open-Brace", c, lineNumber)); x += 1; continue
+			token_list.append(("lbrace", c, lineNumber)); x += 1; continue
 		if c == '}':
-			token_list.append(("Close-Brace", c, lineNumber)); x += 1; continue
+			token_list.append(("rbrace", c, lineNumber)); x += 1; continue
 		if c == ';':
-			token_list.append(("Semicolon", c, lineNumber)); x += 1; continue
+			token_list.append(("semicolon", c, lineNumber)); x += 1; continue
 		if c == ',':
-			token_list.append(("Comma", c, lineNumber)); x += 1; continue
+			token_list.append(("comma", c, lineNumber)); x += 1; continue
 
 		# unknown/ignored characters - skip
 		x += 1
@@ -80,17 +94,26 @@ def lex(source):
 def check(newStr):
 	if newStr == '' or newStr == '\n':
 		return None
-	elif newStr in keywords:
-		# classify true/false as Boolean for convenience
-		if newStr == 'true' or newStr == 'false':
-			return ("Boolean", newStr, lineNumber)
-		return ("Keyword", newStr, lineNumber)
-	elif newStr in types:
-		return ("Type", newStr, lineNumber)
-	# numeric literal detection (integer or float)
-	elif newStr.replace('.', '', 1).isdigit() and newStr.count('.') <= 1 and newStr != '.':
-		if '.' in newStr:
-			return ("Float", newStr, lineNumber)
-		return ("Integer", newStr, lineNumber)
-	elif len(newStr) > 0 and len(newStr) < 32:
-		return ("Identifier", newStr, lineNumber)
+
+	# Keywords: emit the keyword itself as the token type (e.g. 'for', 'if')
+	if newStr in keywords:
+		return (newStr, newStr, lineNumber)
+
+	# Types: emit the type name as the token type (e.g. 'int', 'float')
+	if newStr in types:
+		return (newStr, newStr, lineNumber)
+
+	# numeric literal detection (integer or float) -> emit ('number', value)
+	if newStr.replace('.', '', 1).isdigit() and newStr.count('.') <= 1 and newStr != '.':
+		try:
+			if '.' in newStr:
+				return ("number", float(newStr), lineNumber)
+			return ("number", int(newStr), lineNumber)
+		except Exception:
+			return ("number", newStr, lineNumber)
+
+	# identifier
+	if len(newStr) > 0 and len(newStr) < 32:
+		return ("identifier", newStr, lineNumber)
+
+	return None

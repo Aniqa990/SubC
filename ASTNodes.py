@@ -40,22 +40,32 @@ class Return():
 		return self.expression
 
 class Function():
-
 	name = ""
 	statement = 0
+	return_type = None
+	params = None
 
-	def __init__(self, name, statement):
+	def __init__(self, name, return_type, params, statement):
 		self.name = name
+		self.return_type = return_type
+		# params is a list of (type, name) tuples
+		self.params = params or []
 		self.statement = statement
-	
+
 	def getName(self):
 		return self.name
 
 	def getStatement(self):
 		return self.statement
 
+	def getReturnType(self):
+		return self.return_type
+
+	def getParams(self):
+		return self.params
+
 	def __repr__(self):
-		return f"Function(name={self.name!r}, stmt={repr(self.statement)})"
+		return f"Function(name={self.name!r}, return_type={self.return_type!r}, params={self.params!r}, stmt={repr(self.statement)})"
 
 class Program():
 
