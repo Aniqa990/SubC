@@ -2,12 +2,12 @@ import ASTNodes as AST
 
 
 def pretty_print_ast_tree(node, prefix="", is_last=True):
+    r"""
+    Pretty-print an AST node as a tree with ASCII characters.
+    Uses \-- and |-- for branches, and | for continuations.
     """
-    Pretty-print an AST node as a tree with box-drawing characters.
-    Uses ├── and └── for branches, and │ for continuations.
-    """
-    # Determine the connector
-    connector = "└── " if is_last else "├── "
+    # Determine the connector (using ASCII-safe characters)
+    connector = "\\-- " if is_last else "|-- "
     
     # Print the current node
     if isinstance(node, AST.Program):
@@ -24,7 +24,7 @@ def pretty_print_ast_tree(node, prefix="", is_last=True):
         ]
         for i, (label, child) in enumerate(children):
             is_last_child = (i == len(children) - 1)
-            child_connector = "└── " if is_last_child else "├── "
+            child_connector = "\\-- " if is_last_child else "|-- "
             if label == "return_type":
                 print(f"{new_prefix}{child_connector}{label}: {child}")
             elif label == "params":
@@ -33,7 +33,7 @@ def pretty_print_ast_tree(node, prefix="", is_last=True):
                     child_prefix = _get_new_prefix(new_prefix, is_last_child)
                     for j, (typ, name) in enumerate(child):
                         param_is_last = (j == len(child) - 1)
-                        param_connector = "└── " if param_is_last else "├── "
+                        param_connector = "\\-- " if param_is_last else "|-- "
                         print(f"{child_prefix}{param_connector}({typ}, {name})")
             else:
                 child_prefix = _get_new_prefix(new_prefix, is_last_child)
@@ -89,7 +89,7 @@ def pretty_print_ast_tree(node, prefix="", is_last=True):
         
         for i, (label, child) in enumerate(children):
             child_is_last = (i == len(children) - 1)
-            child_connector = "└── " if child_is_last else "├── "
+            child_connector = "\\-- " if child_is_last else "|-- "
             if label in ("init", "condition", "step"):
                 print(f"{new_prefix}{child_connector}{label}:")
                 child_prefix = _get_new_prefix(new_prefix, child_is_last)
@@ -138,7 +138,7 @@ def _print_tree_node(node, prefix, is_last):
     """Helper to print a single tree node with proper prefix."""
     if node is None:
         return
-    connector = "└── " if is_last else "├── "
+    connector = "\\-- " if is_last else "|-- "
     
     if isinstance(node, AST.Program):
         print(f"{prefix}{connector}Program")
@@ -153,7 +153,7 @@ def _print_tree_node(node, prefix, is_last):
         ]
         for i, (label, child) in enumerate(children):
             child_is_last = (i == len(children) - 1)
-            child_connector = "└── " if child_is_last else "├── "
+            child_connector = "\\-- " if child_is_last else "|-- "
             if label == "return_type":
                 print(f"{new_prefix}{child_connector}{label}: {child}")
             elif label == "params":
@@ -162,7 +162,7 @@ def _print_tree_node(node, prefix, is_last):
                     param_prefix = _get_new_prefix(new_prefix, child_is_last)
                     for j, (typ, name) in enumerate(child):
                         param_is_last = (j == len(child) - 1)
-                        param_connector = "└── " if param_is_last else "├── "
+                        param_connector = "\\-- " if param_is_last else "|-- "
                         print(f"{param_prefix}{param_connector}({typ}, {name})")
             else:
                 child_prefix = _get_new_prefix(new_prefix, child_is_last)
@@ -214,7 +214,7 @@ def _print_tree_node(node, prefix, is_last):
         
         for i, (label, child) in enumerate(children):
             child_is_last = (i == len(children) - 1)
-            child_connector = "└── " if child_is_last else "├── "
+            child_connector = "\\-- " if child_is_last else "|-- "
             if label in ("init", "condition", "step"):
                 print(f"{new_prefix}{child_connector}{label}:")
                 child_prefix = _get_new_prefix(new_prefix, child_is_last)
@@ -255,7 +255,7 @@ def _print_tree_node(node, prefix, is_last):
 
 def _get_new_prefix(prefix, is_last):
     """Return the prefix for the next level of indentation."""
-    return prefix + ("    " if is_last else "│   ")
+    return prefix + ("    " if is_last else "|   ")
 
 
 def _print_children(children, prefix, is_last, extractor):

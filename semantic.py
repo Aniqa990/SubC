@@ -44,9 +44,24 @@ class SemanticAnalyzer:
     def declare_var(self, name, typ, kind='local', init_value=None):
         """Declare a variable in the current lexical scope.
 
-        kind: 'param'|'local'
+        kind: 'param'|'local'|'global'
         init_value: optional initializer value for additional info
         """
+        # Global variables can be declared without active scope
+        if kind == 'global':
+            if name in self.global_symbols:
+                self.error(f"Duplicate declaration of global variable '{name}'")
+            addr = self._alloc_addr()
+            additional = {'kind': 'global'}
+            if init_value is None:
+                additional['initialized'] = False
+            else:
+                additional['initialized'] = True
+                additional['init_value'] = init_value
+            self.global_symbols[name] = {'type': typ, 'addr': addr, 'additional': additional}
+            return
+        
+        # Local/param variables require active scope
         if not self.scopes:
             self.error('No active scope to declare variable')
         scope = self.scopes[-1]
@@ -67,13 +82,17 @@ class SemanticAnalyzer:
         if self.current_function is not None and self._current_function_scopes is not None and len(self._current_function_scopes) > 0:
             self._current_function_scopes[-1]['symbols'][name] = {'type': typ, 'addr': addr, 'additional': additional}
         else:
-            # global scope
+            # global scope (shouldn't reach here due to earlier return)
             self.global_symbols[name] = {'type': typ, 'addr': addr, 'additional': additional}
 
     def lookup_var(self, name):
+        # Check local scopes first
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
+        # Fall back to global symbols
+        if name in self.global_symbols:
+            return self.global_symbols[name]['type']
         return None
 
     def resolve_symbol_ref(self, name):
@@ -191,10 +210,16 @@ class SemanticAnalyzer:
         
         # Program nodes
         if t is AST.Program:
-            funcs = node.getFunction()
-            if funcs:
-                for f in funcs:
-                    self.populate_symbol_refs(f)
+            items = node.getFunction()  # Now mixed: functions and global VarDecl
+            if items:
+                for item in items:
+                    if isinstance(item, AST.VarDecl):
+                        # Handle global variable declaration - recurse into initializer
+                        if item.init:
+                            self.populate_symbol_refs(item.init)
+                    else:
+                        # Function - recurse normally
+                        self.populate_symbol_refs(item)
             return
 
     def add_function(self, name, return_type, params):
@@ -206,20 +231,30 @@ class SemanticAnalyzer:
         self.global_symbols[name] = {'type': 'function', 'addr': addr, 'additional': {'returns': return_type, 'params': params}}
 
     def analyze(self, program: AST.Program):
-        funcs = program.getFunction()
-        # Expect funcs to be a list
-        if funcs is None:
+        items = program.getFunction()
+        # Expect items to be a list (can be functions or global variable declarations)
+        if items is None:
             return
 
-        # First pass: collect function signatures
-        for f in funcs:
-            if not isinstance(f, AST.Function):
-                self.error('Top-level non-function declaration')
-            self.add_function(f.getName(), f.getReturnType(), f.getParams())
+        # First pass: collect function signatures and declare global variables
+        for item in items:
+            if isinstance(item, AST.Function):
+                self.add_function(item.getName(), item.getReturnType(), item.getParams())
+            elif isinstance(item, AST.VarDecl):
+                # Global variable declaration
+                init_type = None
+                if item.init:
+                    init_type = self.type_of(item.init)
+                    if not self.is_assignable(item.typ, init_type):
+                        self.error(f"Type mismatch in global variable initialization")
+                self.declare_var(item.name, item.typ, kind='global', init_value=item.init)
+            else:
+                self.error('Unexpected top-level item')
 
         # Second pass: analyze each function body
-        for f in funcs:
-            self.analyze_function(f)
+        for item in items:
+            if isinstance(item, AST.Function):
+                self.analyze_function(item)
 
         # Third pass: populate symbol references in the AST
         self.populate_symbol_refs(program)
@@ -236,8 +271,16 @@ class SemanticAnalyzer:
         for (t, name) in func.getParams():
             self.declare_var(name, t, kind='param')
 
-        # analyze body
-        self.analyze_block(func.getStatement())
+        # analyze body statements in the function entry scope so that
+        # parameters and top-level declarations in the function body
+        # share the same scope (displayed as Level 1).
+        body = func.getStatement()
+        if body is not None:
+            # `body` is an AST.Block; analyze its statements without
+            # pushing a new scope so top-level local declarations
+            # belong to the function scope created above.
+            for stmt in body.statements:
+                self.analyze_stmt(stmt)
 
         # save a copy of the scopes recorded for this function
         # deep copy minimal structure
@@ -267,7 +310,7 @@ class SemanticAnalyzer:
                     add_str = f"returns={additional.get('returns')}, params={additional.get('params')}"
                 else:
                     add_str = ', '.join([f"{k}={v}" for k, v in additional.items()])
-                print(f"{name:20} {typ:12} {'Global':8} {'-':6} {addr:12} {add_str}")
+                print(f"{name:20} {typ:12} {'Global':8} {'0':6} {addr:12} {add_str}")
 
         # Print per-function symbol tables (scoped)
         for fname, scopes in self.function_symbols.items():
@@ -286,8 +329,8 @@ class SemanticAnalyzer:
                         add_items.append(f"{k}={v}")
                     add_str = ', '.join(add_items)
                     scope_display = f"{label}({kind})"
-                    # print Level as the scope index i
-                    print(f"{vname:20} {typ:12} {scope_display:12} {i:<6} {addr:12} {add_str}")
+                    # print Level as (scope index + 1) to distinguish from global level 0
+                    print(f"{vname:20} {typ:12} {scope_display:12} {(i+1):<6} {addr:12} {add_str}")
         print('\n--- End Symbol Tables ---\n')
 
     # (old simple printer removed)

@@ -15,23 +15,27 @@ def parse(tokens):
 
 
 def Program():
-    # Program → FunctionList
-    funcs = FunctionList()
-    return AST.Program(funcs)
+    # Program → TopLevelList
+    top_level = TopLevelList()
+    return AST.Program(top_level)
 
 
-def FunctionList():
-    # FunctionList → Function FunctionList | Function
-    funcs = []
+def TopLevelList():
+    # TopLevelList → TopLevel TopLevelList | ε
+    items = []
     while lookahead() is not None:
-        # Expect top-level function declarations to start with 'func'
         la = lookahead()
+        # Top-level can be:
+        # - 'func' Type Identifier '(' ... ')' Block
+        # - Type Identifier ... ';' (global variable)
         if la[0] == 'func':
-            funcs.append(Function())
+            items.append(Function())
+        elif la[0] in lexer.types:
+            # Global variable declaration
+            items.append(VarDecl())
         else:
-            # Anything else at top-level is a parse error
-            fail('Expected top-level function starting with "func"')
-    return funcs
+            fail(f'Expected top-level declaration (function or global variable), got: {la!r}')
+    return items
 
 
 def Function():

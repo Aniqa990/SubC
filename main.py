@@ -35,7 +35,11 @@ def compile(contents):
 	# Show lexer output (tokens)
 	print("--- Lexical analysis (tokens) ---")
 	for t in token_list:
-		print(t)
+		# Remove symbol_ref dict (4th element) from identifier tokens for cleaner output
+		if len(t) == 4 and t[0] == 'identifier':
+			print((t[0], t[1], t[2]))
+		else:
+			print(t)
 	print("--- End tokens ---\n")
 
 	# Parse and show AST

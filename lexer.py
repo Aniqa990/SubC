@@ -1,5 +1,5 @@
 keywords = ["auto", "struct", "break", "else", "switch", "case", "enum", "register", "typedef", "extern", "return", "union", "const", "unsigned", "continue", "for", "signed", "void" , "default", "sizeof", "volatile" , "do", "if", "static", "while", "true", "false", "print", "read", "func"]
-types = ["double", "int", "long", "char", "float", "short", "bool"] 
+types = ["double", "int", "long", "char", "float", "short", "bool", "void"] 
 
 '''
 Produces a stream of tokens.
